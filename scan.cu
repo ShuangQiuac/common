@@ -5,15 +5,60 @@
  *      Author: qiushuang
  */
 
+#ifndef SCAN_CUH
+#define SCAN_CUH
+
 #include <stdio.h>
+#include <iostream>
 #include <stdlib.h>
 #include <cuda_runtime.h>
 #include "utility.h"
+
+using namespace std;
+
+#ifdef __CUDACC__
+#define CUDA_CALLABLE_MEMBER __host__ __device__
+#else
+#define CUDA_CALLABLE_MEMBER
+#endif
 
 #define THREADS_PER_SCAN 1024
 #define NUM_WARPS_PER_BLOCK 32
 #define WARP_WIDTH 32
 #define MAX_BLOCK_SIZE 1024
+
+typedef unsigned char byte;
+
+template <typename T>
+class deviceMemory {
+private:
+	byte * darray;
+	size_t dsize;
+
+public:
+	__host__ T * mallocDeviceMemory (size_t size)
+	{
+		CUDA_CHECK_RETURN (cudaMalloc (&darray, sizeof(T) * size));
+		T * dptr = reinterpret_cast<T *> (darray);
+		dsize = size;
+		return dptr;
+	}
+
+	__host__ void freeDeviceMemory (void)
+	{
+		CUDA_CHECK_RETURN (cudaFree (darray));
+	}
+
+	__host__ size_t getSize (void)
+	{
+		return dsize;
+	}
+
+	__host__ void setZero (void)
+	{
+		CUDA_CHECK_RETURN (cudaMemset (darray, 0, sizeof(T) * dsize));
+	}
+};
 
 template <typename T>
 __global__ void local_scan (T * data, T * block_sum)
@@ -38,21 +83,18 @@ __global__ void local_scan (T * data, T * block_sum)
 
 template <typename T>
 __global__ void
-scan_within_block (T * array, uint num, int bulk)
+scan_within_block (T * array, uint num, int bulk, T * sumbs)
 {
 	uint gid = blockIdx.x * blockDim.x + threadIdx.x;
 	uint tid = threadIdx.x;
 	uint warpid = threadIdx.x / WARP_WIDTH;
 	uint laneid = threadIdx.x % WARP_WIDTH;
 
-	__shared__ __align__(sizeof(T)) unsigned char mysumpb[NUM_WARPS_PER_BLOCK * sizeof(T)];
+	extern __shared__ __align__(sizeof(T)) byte mysumpb[];
 	T * sumpb = reinterpret_cast<T *> (mysumpb);
 
-	__shared__ __align__(sizeof(T)) unsigned char mypartial[THREADS_PER_SCAN * sizeof(T)];
-	T * partial = reinterpret_cast<T *> (mypartial);
+	T * partial = sumpb + NUM_WARPS_PER_BLOCK;
 
-	__align__(sizeof(T)) unsigned char mysumbs[MAX_BLOCK_SIZE * sizeof(T)];
-	T * sumbs = reinterpret_cast<T *> (mysumbs);
 
 	if (gid * bulk >= num)
 		return;
@@ -70,11 +112,12 @@ scan_within_block (T * array, uint num, int bulk)
 #pragma unroll
 	for (i = 1; i < WARP_WIDTH; i <<= 1)
 	{
-		T y = __shfl_up_sync (x, i, WARP_WIDTH);
+		T y = __shfl_up_sync (0xffffffff, x, i, WARP_WIDTH);
 		if (laneid >= i)
 			x += y;
 	}
 	partial[tid] = x;
+
 	/* sums per block */
 	if (laneid == WARP_WIDTH - 1)
 	{
@@ -89,7 +132,7 @@ scan_within_block (T * array, uint num, int bulk)
 #pragma unroll
 		for (i = 1; i < WARP_WIDTH; i <<= 1)
 		{
-			T y = __shfl_up_sync (x, i, WARP_WIDTH);
+			T y = __shfl_up_sync (0xffffffff, x, i, WARP_WIDTH);
 			if (laneid >= i)
 				x += y;
 		}
@@ -117,18 +160,15 @@ scan_within_block (T * array, uint num, int bulk)
 
 template <typename T>
 __global__ void
-scan_block_sum (void)
+scan_block_sum (T * sumbs)
 {
 	uint gid = blockIdx.x * blockDim.x + threadIdx.x;
 	uint tid = threadIdx.x;
 	uint warpid = threadIdx.x / WARP_WIDTH;
 	uint laneid = threadIdx.x % WARP_WIDTH;
 
-	__shared__ __align__(sizeof(T)) unsigned char mysumpb[NUM_WARPS_PER_BLOCK * sizeof(T)];
+	extern __shared__ __align__(sizeof(T)) byte mysumpb[];
 	T * sumpb = reinterpret_cast<T *> (mysumpb);
-
-	__align__(sizeof(T)) unsigned char mysumbs[MAX_BLOCK_SIZE * sizeof(T)];
-	T * sumbs = reinterpret_cast<T *> (mysumbs);
 
 	T x;
 	int i;
@@ -138,7 +178,7 @@ scan_block_sum (void)
 #pragma unroll
 		for (i = 1; i < WARP_WIDTH; i <<= 1)
 		{
-			T y = __shfl_up_sync (x, i, WARP_WIDTH);
+			T y = __shfl_up_sync (0xffffffff, x, i, WARP_WIDTH);
 			if (laneid >= i)
 				x += y;
 		}
@@ -156,7 +196,7 @@ scan_block_sum (void)
 #pragma unroll
 			for (i = 1; i < WARP_WIDTH; i <<= 1)
 			{
-				T y = __shfl_up_sync (x, i, WARP_WIDTH);
+				T y = __shfl_up_sync (0xffffffff, x, i, WARP_WIDTH);
 				if (laneid >= i)
 					x += y;
 			}
@@ -173,12 +213,9 @@ scan_block_sum (void)
 
 template <typename T>
 __global__ void
-scan_blocks (T * array, uint num, int bulk)
+scan_blocks (T * array, uint num, int bulk, T * sumbs)
 {
 	uint gid = blockIdx.x * blockDim.x + threadIdx.x;
-
-	__align__(sizeof(T)) unsigned char mysumbs[MAX_BLOCK_SIZE * sizeof(T)];
-	T * sumbs = reinterpret_cast<T *> (mysumbs);
 
 	if (gid * bulk >= num)
 		return;
@@ -198,18 +235,28 @@ void inclusive_scan (T * data, uint num, cudaStream_t stream)
 	int bulk = (num + MAX_BLOCK_SIZE - 1) / MAX_BLOCK_SIZE;
 	bulk = (bulk + THREADS_PER_SCAN - 1) / THREADS_PER_SCAN;
 	int block_size = MAX_BLOCK_SIZE;
-	scan_within_block <<<block_size, THREADS_PER_SCAN, NUM_WARPS_PER_BLOCK+THREADS_PER_SCAN, stream>>> (data, num, bulk);
-//	scan_block_sum <<<1, THREADS_PER_SCAN, NUM_WARPS_PER_BLOCK+THREADS_PER_SCAN, stream>>> ();
-//	scan_blocks <<<block_size, THREADS_PER_SCAN, NUM_WARPS_PER_BLOCK+THREADS_PER_SCAN, stream>>> (data, num, bulk);
+	deviceMemory<T> dsumbs;
+	T * sumbs = dsumbs.mallocDeviceMemory(MAX_BLOCK_SIZE);
+	dsumbs.setZero();
+	cout << "size of device array: " << dsumbs.getSize() << endl;
+
+	scan_within_block <<<block_size, THREADS_PER_SCAN, (NUM_WARPS_PER_BLOCK+THREADS_PER_SCAN) * sizeof(T), stream>>> (data, num, bulk, sumbs);
+	scan_block_sum <<<1, THREADS_PER_SCAN, (NUM_WARPS_PER_BLOCK+THREADS_PER_SCAN) * sizeof(T), stream>>> (sumbs);
+	scan_blocks <<<block_size, THREADS_PER_SCAN, (NUM_WARPS_PER_BLOCK+THREADS_PER_SCAN) * sizeof(T), stream>>> (data, num, bulk, sumbs);
+
+	dsumbs.freeDeviceMemory();
+
 }
 
 int main (void)
 {
 	int i;
 	int n;
-	n = 4096 * 256 + 1;
+	n = 4096 * 4096 + 1;
+//	n = 1024;
 	unsigned int * data = (unsigned int *) malloc (sizeof(unsigned int) * (n+1));
 	CHECK_PTR_RETURN (data, "malloc scan data error!\n");
+	memset (data, 0, sizeof(unsigned int) * (n+1));
 	for (i = 0; i < n; i++)
 	{
 		data[i] = 1;
@@ -218,11 +265,13 @@ int main (void)
 	CUDA_CHECK_RETURN (cudaMalloc (&d_data, sizeof(unsigned int) * (n+1)));
 	CUDA_CHECK_RETURN (cudaMemcpy (d_data, data, sizeof(unsigned int) * (n+1), cudaMemcpyHostToDevice));
 
-	inclusive_scan <unsigned int> (d_data, n + 1, NULL);
-	CUDA_CHECK_RETURN (cudaMemcpy (data, d_data, sizeof(unsigned int) * (n+1), cudaMemcpyDeviceToHost));
+	inclusive_scan <unsigned int> (d_data + 1, n, NULL);
+	CUDA_CHECK_RETURN (cudaMemcpy (data + 1, d_data + 1, sizeof(unsigned int) * (n), cudaMemcpyDeviceToHost));
 	printf ("data[%u]=%d, data[%u] = %u\tdata[%u] = %u, data[%u] = %d\n", 0, data[0], n-1, data[n - 1], n-2, data[n - 2], n, data[n]);
 
 	cudaFree (d_data);
 	free (data);
 	return 0;
 }
+
+#endif /*SCAN_CUH*/
