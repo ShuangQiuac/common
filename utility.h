@@ -16,6 +16,7 @@
 #include <stdbool.h>
 #include <time.h>
 #include <sys/time.h>
+#include <stdint.h>
 
 #ifndef LITTLE_ENDIAN
 #define LITTLE_ENDIAN
@@ -38,7 +39,7 @@
 typedef unsigned long long ull;
 typedef unsigned long long idtype;
 typedef unsigned char uch;
-typedef unsigned int uint;
+typedef uint32_t uint;
 typedef uint offset_t;
 
 typedef struct timeval evaltime_t;

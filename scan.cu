@@ -269,6 +269,7 @@ int main (void)
 	CUDA_CHECK_RETURN (cudaMemcpy (data + 1, d_data + 1, sizeof(unsigned int) * (n), cudaMemcpyDeviceToHost));
 	printf ("data[%u]=%d, data[%u] = %u\tdata[%u] = %u, data[%u] = %d\n", 0, data[0], n-1, data[n - 1], n-2, data[n - 2], n, data[n]);
 
+	printf ("sizeof(i) = %d\n", sizeof(i));
 	cudaFree (d_data);
 	free (data);
 	return 0;
