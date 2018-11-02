@@ -100,11 +100,11 @@ scan_within_block (T * array, uint num, int bulk, T * sumbs)
 		return;
 
 	int i;
-	for (i = 1; i < bulk; i++)
+	for (i = 1; (i < bulk) && (gid*bulk+i < num); i++)
 	{
 		array[gid * bulk + i] += array[gid * bulk + i - 1];
 	}
-	partial[tid] = array[gid * bulk + bulk - 1];
+	partial[tid] = array[gid * bulk + i-1];
 	__syncthreads();
 
 	T x = partial[tid];
@@ -147,7 +147,7 @@ scan_within_block (T * array, uint num, int bulk, T * sumbs)
 	__syncthreads();
 	if (tid > 0)
 	{
-		for (i = 0; i < bulk; i++)
+		for (i = 0; (i < bulk) && (gid*bulk+i < num); i++)
 		{
 			array[gid * bulk + i] += partial[tid - 1];
 		}
@@ -222,7 +222,7 @@ scan_blocks (T * array, uint num, int bulk, T * sumbs)
 	if (blockIdx.x > 0)
 	{
 		int i;
-		for (i = 0; i < bulk; i++)
+		for (i = 0; (i < bulk) && (gid*bulk+i < num); i++)
 		{
 			array[gid * bulk + i] += sumbs[blockIdx.x - 1];
 		}
@@ -241,7 +241,7 @@ void inclusive_scan (T * data, uint num, cudaStream_t stream)
 	cout << "size of device array: " << dsumbs.getSize() << endl;
 
 	scan_within_block <<<block_size, THREADS_PER_SCAN, (NUM_WARPS_PER_BLOCK+THREADS_PER_SCAN) * sizeof(T), stream>>> (data, num, bulk, sumbs);
-	scan_block_sum <<<1, THREADS_PER_SCAN, (NUM_WARPS_PER_BLOCK+THREADS_PER_SCAN) * sizeof(T), stream>>> (sumbs);
+	scan_block_sum <<<1, MAX_BLOCK_SIZE, (NUM_WARPS_PER_BLOCK+THREADS_PER_SCAN) * sizeof(T), stream>>> (sumbs);
 	scan_blocks <<<block_size, THREADS_PER_SCAN, (NUM_WARPS_PER_BLOCK+THREADS_PER_SCAN) * sizeof(T), stream>>> (data, num, bulk, sumbs);
 
 	dsumbs.freeDeviceMemory();
