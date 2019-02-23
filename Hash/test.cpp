@@ -93,7 +93,7 @@ void TestDriver::check_hash_results_warp (entry_kv_t * tab, size_t size)
 
 int main (void)
 {
-	size_t N = 100000;
+	size_t N = 1UL << 24;
 	uint * key = (uint *) malloc (sizeof(uint) * N);
 	CHECK_PTR_RETURN (key, "malloc host keys error!\n");
 	uint * value = (uint *) malloc (sizeof(uint) * N);

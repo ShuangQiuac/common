@@ -12,9 +12,8 @@ find_package("CUDA" REQUIRED)
     macro(cuda_add_compile_options options)
         list(APPEND CUDA_NVCC_FLAGS "${options}")
     endmacro()
-    cuda_add_compile_options("--gpu-architecture=sm_30 -Xptxas -dlcm=cg -Xcompiler '-fPIC'")
-    cuda_add_compile_options("-std=c++11 -g -G -lpthread")
-    cuda_add_compile_options("-Xcompiler ${OpenMP_CXX_FLAGS}")
+    cuda_add_compile_options("--gpu-architecture=sm_30 -Xptxas -dlcm=cg")
+    cuda_add_compile_options("-std=c++11")
 
 include_directories(/usr/local/cudpp/include)
 
@@ -27,11 +26,4 @@ target_link_libraries(test_driver cudart)
 target_link_libraries(test_driver cudpp_hash)
 target_link_libraries(test_driver cudpp)
 
-set(SOURCE_FILES main.cpp)
-add_executable(hashtest ${SOURCE_FILES})
-target_link_libraries(hashtest test_driver)
-
 cuda_add_library(warphash SHARED hash.cu)
-set(MY_HASH_SOURCE test.cpp)
-add_executable(myhash ${MY_HASH_SOURCE})
-target_link_libraries(myhash warphash)

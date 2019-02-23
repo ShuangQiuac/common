@@ -11,7 +11,7 @@
 #include "type.h"
 #include "utility.h"
 
-#define ELEM_FACTOR 0.9 // 0.27 for hg7, 0.25 for human14 and ecoli
+#define ELEM_FACTOR 1 // 0.27 for hg7, 0.25 for human14 and ecoli
 
 #define EMPTY // empty entry slot
 #define MAX_TABLE_SIZE 4294967295 // 2^32-1

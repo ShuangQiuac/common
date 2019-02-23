@@ -33,7 +33,7 @@
 
 void test_driver (void)
 {
-	uint N = 100000;
+	uint N = 1UL << 24;
 	uint* key = (uint*) malloc (sizeof(uint) * N);
 	CHECK_PTR_RETURN (key, "malloc host keys error!\n");
 	uint* value = (uint*) malloc (sizeof(uint) * N);
