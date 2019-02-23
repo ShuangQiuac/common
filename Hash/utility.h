@@ -16,7 +16,6 @@
 #include <stdbool.h>
 #include <time.h>
 #include <sys/time.h>
-#include <stdint.h>
 
 #ifndef LITTLE_ENDIAN
 #define LITTLE_ENDIAN
@@ -32,17 +31,7 @@
   #error "Please provide a definition for MY_ALIGN macro for your host compiler!"
 #endif
 
-#ifndef CHAR_BIT
-#define CHAR_BIT 8
-#endif
 
-typedef unsigned long long ull;
-typedef unsigned long long idtype;
-typedef unsigned char uch;
-typedef uint32_t uint;
-typedef uint offset_t;
-
-typedef struct timeval evaltime_t;
 
 #define MIN(x, y) { (x) < (y) ? (x) : (y) }
 

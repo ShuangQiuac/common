@@ -8,7 +8,7 @@
 #ifndef HASH_H_
 #define HASH_H_
 
-
+#include "type.h"
 #include "utility.h"
 
 #define ELEM_FACTOR 0.9 // 0.27 for hg7, 0.25 for human14 and ecoli
@@ -18,10 +18,6 @@
 #define DEFAULT_SEED 3735928559
 
 #define THREADS_PER_TABLE 24 // threads in cpu
-
-typedef uint hashsize_t;
-typedef uint hashval_t;
-typedef uint prime_index_t;
 
 
 /* MURMUR HASH FUNCTION: */
@@ -96,7 +92,6 @@ __device__ __host__ static uint fnv_hash_32 (const char * key)
 
 
 /*BIT OPERATIONS, reference: http://graphics.stanford.edu/~seander/bithacks.html#SelectPosFromMSBRank*/
-#define BYTE_BIT 8
 #define count_bit_set(v, pos, r) {\
 		  r = v >> (sizeof(v) * BYTE_BIT - pos); \
 		  r = r - ((r >> 1) & ~0UL/3); \

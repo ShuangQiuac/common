@@ -5,9 +5,11 @@
  *      Author: qiushuang
  */
 #include <stdio.h>
+#include <time.h>
 #include <cuda_runtime.h>
 #include "cudpp_hash.h"
-typedef unsigned int uint;
+#include "type.h"
+#include "utility.h"
 
 #define CUDA_CHECK_RETURN(value) {											\
 	cudaError_t _m_cudaStat = value;										\
@@ -24,6 +26,10 @@ typedef unsigned int uint;
 		exit (1);													\
 	} }
 
+#define CHECK_KERNEL_LAUNCH() {\
+		if ( cudaSuccess != cudaGetLastError() ) {\
+		    printf( "Error in lauching kernel!\n" );\
+			exit(1); }}
 
 void test_driver (void)
 {
@@ -61,7 +67,16 @@ void test_driver (void)
 	CUDPPHandle tableHandle;
 	cudppHashTable(cudppHandle, &tableHandle, &hashtabConfig);
 	printf ("cudppHashHandle value: %lu\n", tableHandle);
+
+	evaltime_t start, end;
+	float hashInsertTime = 0;
+	CUDA_CHECK_RETURN (cudaDeviceSynchronize());
+	gettimeofday (&start, NULL);
 	cudppHashInsert(tableHandle, (void*)d_key, (void*)d_value, N);
+	CUDA_CHECK_RETURN (cudaDeviceSynchronize());
+	gettimeofday (&end, NULL);
+	hashInsertTime = (float)((end.tv_sec * 1000000 + end.tv_usec) - (start.tv_sec * 1000000 + start.tv_usec)) / 1000;
+	printf ("Hash insert  time: %f\n", hashInsertTime);
 	cudppHashRetrieve(tableHandle, d_input, d_output, N);
 
 	CUDA_CHECK_RETURN (cudaMemcpy(output, d_output, sizeof(uint) * N, cudaMemcpyDeviceToHost));

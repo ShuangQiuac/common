@@ -29,5 +29,9 @@ target_link_libraries(test_driver cudpp)
 
 set(SOURCE_FILES main.cpp)
 add_executable(hashtest ${SOURCE_FILES})
-
 target_link_libraries(hashtest test_driver)
+
+cuda_add_library(warphash SHARED hash.cu)
+set(MY_HASH_SOURCE test.cpp)
+add_executable(myhash ${MY_HASH_SOURCE})
+target_link_libraries(myhash warphash)
