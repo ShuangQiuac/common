@@ -8,8 +8,12 @@ set(CMAKE_CXX_STANDARD 11)
 #Set C++ compiling flags
 set(CMAKE_CXX_FLAGS "-O0 -Wall -g")
 
-include_directories(/usr/local/cudpp/include)
+find_package("CUDA" REQUIRED)
+    macro(cuda_add_compile_options options)
+        list(APPEND CUDA_NVCC_FLAGS "${options}")
+    endmacro()
 
+include_directories(/usr/local/cudpp/include)
 link_directories(/usr/local/cuda-7.5/lib64)
 link_directories(/usr/local/cuda-9.2/lib64)
 link_directories(/usr/local/cudpp/lib)

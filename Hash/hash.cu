@@ -346,9 +346,7 @@ __global__ void insert_key_value_hashtab_warp (key_type * input_keys, value_type
 	uint gid = blockDim.x * blockIdx.x + threadIdx.x;
 	uint tid = threadIdx.x;
 	uint warpid = gid / WARP_WIDTH;
-//	uint laneid = tid % WARP_WIDTH;
-	thread_block_tile<4> tile4 = tiled_partition<4>(this_thread_block());
-	uint laneid = tile4.thread_rank();
+	uint laneid = tid % WARP_WIDTH;
 
 	size_t keys_per_warp = (num_of_keys + (MAX_NUM_THREADS/WARP_WIDTH - 1)) / (MAX_NUM_THREADS/WARP_WIDTH); // keys per block
 //	keys_per_warp = (keys_per_warp + WARP_WIDTH - 1) / WARP_WIDTH;
@@ -543,8 +541,8 @@ __global__ void insert_key_value_hashtab_cooperative_group (key_type * input_key
 	int warpsize = 8;
 	int slotsize = 8;
 	uint warpid = gid / warpsize;
-	thread_block_tile<4> tile4 = tiled_partition<4>(this_thread_block());
-	uint laneid = tile4.thread_rank();
+	thread_block_tile<8> g = tiled_partition<8>(this_thread_block());
+	uint laneid = g.thread_rank();
 	ull full_mask;
 	if (warpsize == 8)
 		full_mask = 0xff000000;
@@ -598,7 +596,7 @@ __global__ void insert_key_value_hashtab_cooperative_group (key_type * input_key
 			{
 				flag = atomicCAS(state_ptr, 0, 1);
 			}
-			flag = __shfl_sync (full_mask, flag, 0, warpsize); // broadcast flag to threads in this warp
+			flag = g.shfl(flag, 0); // broadcast flag to threads in this warp
 			active = *slot_mask_ptr;
 			if (flag == 0) // empty slot exists
 			{
@@ -615,7 +613,7 @@ __global__ void insert_key_value_hashtab_cooperative_group (key_type * input_key
 					replace_int_value<value_type> (&(entry->value), *value);
 					cont_flag = 1;
 				}
-				cont_flag = __shfl_sync (full_mask, cont_flag, warpsize-1-r, warpsize);
+				cont_flag = g.shfl (cont_flag, warpsize-1-r);
 				if (cont_flag)
 				{
 					next_flag = true;
@@ -626,17 +624,17 @@ __global__ void insert_key_value_hashtab_cooperative_group (key_type * input_key
 			{
 				while ((flag = atomicCAS(state_ptr, 0, 0)) != 0) {}
 			}
-			flag = __shfl_sync (full_mask, flag, 0, warpsize); // broadcast flag to threads in this warp
+			flag = g.shfl (flag, 0); // broadcast flag to threads in this warp
 			int ret = 0;
 			ret = compare_keys (key, &(entry->key));
-			uint ballot_result = __ballot_sync (full_mask, ret);
+			uint ballot_result = g.ballot (ret);
 			uint r = MultiplyDeBruijnBitPosition[((uint)((ballot_result & -ballot_result) * 0x077CB531U)) >> 27];
 			if (ballot_result && r == warpsize - 1 - laneid)
 			{
 				replace_int_value<value_type> (&(entry->value), *value);
 				cont_flag = 1;
 			}
-			cont_flag = __shfl_sync (full_mask, cont_flag, warpsize-1-r, warpsize);
+			cont_flag = g.shfl (cont_flag, warpsize-1-r);
 			if (cont_flag)
 			{
 				next_flag = true;
@@ -665,7 +663,7 @@ __global__ void insert_key_value_hashtab_cooperative_group (key_type * input_key
 				{
 					flag = atomicCAS(state_ptr, 0, 1);
 				}
-				flag = __shfl_sync (full_mask, flag, 0, warpsize); // broadcast flag to threads in this warp
+				flag = g.shfl (flag, 0); // broadcast flag to threads in this warp
 				active = *slot_mask_ptr;
 				if (flag == 0) // empty slot exists
 				{
@@ -682,7 +680,7 @@ __global__ void insert_key_value_hashtab_cooperative_group (key_type * input_key
 						replace_int_value<value_type> (&(entry->value), *value);
 						cont_flag = 1;
 					}
-					cont_flag = __shfl_sync (full_mask, cont_flag, warpsize-1-r, warpsize);
+					cont_flag = g.shfl (cont_flag, warpsize-1-r);
 					if (cont_flag)
 					{
 						next_flag = true;
@@ -693,17 +691,17 @@ __global__ void insert_key_value_hashtab_cooperative_group (key_type * input_key
 				{
 					while ((flag = atomicCAS(state_ptr, 0, 0)) != 0) {}
 				}
-				flag = __shfl_sync (full_mask, flag, 0, warpsize); // broadcast flag to threads in this warp
+				flag = g.shfl (flag, 0); // broadcast flag to threads in this warp
 				int ret = 0;
 				ret = compare_keys (key, &(entry->key));
-				uint ballot_result = __ballot_sync (full_mask, ret);
+				uint ballot_result = g.ballot (ret);
 				uint r = MultiplyDeBruijnBitPosition[((uint)((ballot_result & -ballot_result) * 0x077CB531U)) >> 27];
 				if (ballot_result && r == warpsize - 1 - laneid)
 				{
 					replace_int_value<value_type> (&(entry->value), *value);
 					cont_flag = 1;
 				}
-				cont_flag = __shfl_sync (full_mask, cont_flag, warpsize-1-r, warpsize);
+				cont_flag = g.shfl (cont_flag, warpsize-1-r);
 				if (cont_flag)
 				{
 					next_flag = true;
